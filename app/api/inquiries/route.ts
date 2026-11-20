@@ -1,2 +1,31 @@
-import {env} from 'cloudflare:workers';import {checkOrigin,fail} from '../../../lib/server';import {inquirySchema} from '../../../lib/inquiries';import {saveInquiry} from '../../../lib/inquiry-store';
-export async function POST(req:Request){try{await checkOrigin(req);const text=await req.text();if(text.length>15000)return Response.json({error:'문의 내용이 너무 깁니다.'},{status:413});let raw;try{raw=JSON.parse(text)}catch{return Response.json({error:'문의 내용을 확인해주세요.'},{status:400});}const parsed=inquirySchema.safeParse(raw);if(!parsed.success)return Response.json({error:parsed.error.issues[0]?.message||'필수 정보를 확인해주세요.'},{status:400});const saved=await saveInquiry(env.DB!,parsed.data,req.headers.get('CF-Connecting-IP')||'unknown');return Response.json({ok:true,reference:saved.reference},{status:saved.existing?200:201,headers:{'Cache-Control':'no-store'}});}catch(e:any){if(e.status===429)return Response.json({error:e.message},{status:429,headers:{'Cache-Control':'no-store','Retry-After':'3600'}});return fail(e);}}
+import { checkOrigin, fail } from '../../../lib/server';
+import { inquirySchema } from '../../../lib/inquiries';
+import { hubsheetApiReply } from '../../../lib/vercel-api';
+
+export async function POST(req: Request) {
+  try {
+    await checkOrigin(req);
+    const text = await req.text();
+    if (text.length > 15000) {
+      return Response.json({ error: '문의 내용이 너무 깁니다.' }, { status: 413 });
+    }
+    let raw: unknown;
+    try {
+      raw = JSON.parse(text);
+    } catch {
+      return Response.json({ error: '문의 내용을 확인해주세요.' }, { status: 400 });
+    }
+    const parsed = inquirySchema.safeParse(raw);
+    if (!parsed.success) {
+      return Response.json({ error: parsed.error.issues[0]?.message || '필수 정보를 확인해주세요.' }, { status: 400 });
+    }
+
+    // Cloudflare keeps the real D1 binding and inquiry rate-limit logic.
+    return await hubsheetApiReply('/api/inquiries', {
+      method: 'POST',
+      body: JSON.stringify(parsed.data),
+    });
+  } catch (error) {
+    return fail(error);
+  }
+}

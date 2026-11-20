@@ -1,4 +1,36 @@
-import {env} from 'cloudflare:workers';import {purgeResolvedInquiries} from '../../../../lib/inquiry-store';
-import {desc,eq} from 'drizzle-orm';import {inquiries} from '../../../../db/schema';import {db,checkOrigin,fail} from '../../../../lib/server';import {requireAdmin} from '../../../../lib/ads';import {z} from 'zod';
-export async function GET(){try{await requireAdmin();await purgeResolvedInquiries(env.DB!);const rows=await db().select().from(inquiries).orderBy(desc(inquiries.createdAt)).limit(200);return Response.json({inquiries:rows},{headers:{'Cache-Control':'private,no-store'}});}catch(e){return fail(e);}}
-export async function PATCH(req:Request){try{await checkOrigin(req);await requireAdmin();const body=z.object({id:z.string().uuid(),status:z.enum(['new','reviewing','resolved'])}).parse(await req.json());const result=await db().update(inquiries).set({status:body.status,updatedAt:new Date().toISOString()}).where(eq(inquiries.id,body.id)).returning({id:inquiries.id});if(!result.length)return Response.json({error:'문의를 찾을 수 없습니다.'},{status:404});return Response.json({ok:true});}catch(e){return fail(e);}}
+import { checkOrigin, fail } from '../../../../lib/server';
+import { requireAdmin } from '../../../../lib/ads';
+import { hubsheetApiReply } from '../../../../lib/vercel-api';
+import { z } from 'zod';
+
+export const dynamic = 'force-dynamic';
+
+export async function GET() {
+  try {
+    await requireAdmin();
+    return await hubsheetApiReply('/api/admin/inquiries');
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function PATCH(req: Request) {
+  try {
+    await checkOrigin(req);
+    await requireAdmin();
+    const body = z.object({
+      id: z.string().uuid(),
+      status: z.enum(['new', 'reviewing', 'resolved']),
+    }).parse(await req.json());
+
+    return await hubsheetApiReply('/api/admin/inquiries', {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return Response.json({ error: '문의 처리 정보를 확인해주세요.' }, { status: 400 });
+    }
+    return fail(error);
+  }
+}
