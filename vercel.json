@@ -1,3 +1,6 @@
 {
-  "buildCommand": "pnpm exec next build --webpack"
+  "buildCommand": "pnpm exec next build --webpack",
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://hubsheet.herestay-4226.chatgpt.site/api/:path*" }
+  ]
 }
