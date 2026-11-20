@@ -1,0 +1,7 @@
+import {inquiryReference,type inquirySchema} from './inquiries';import type {z} from 'zod';
+export async function purgeResolvedInquiries(database:Pick<D1Database,'prepare'>,now=new Date()){await database.prepare("DELETE FROM inquiries WHERE status='resolved' AND updated_at < ?").bind(new Date(now.getTime()-365*24*60*60*1000).toISOString()).run();}
+export async function saveInquiry(database:Pick<D1Database,'prepare'>,value:z.infer<typeof inquirySchema>,ip:string,now=new Date()){
+ await purgeResolvedInquiries(database,now);const existing=await database.prepare('SELECT id FROM inquiries WHERE id=?').bind(value.id).first();if(existing)return {reference:inquiryReference(value.id),existing:true};
+ const key=[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(ip+now.toISOString().slice(0,13))))].map(x=>x.toString(16).padStart(2,'0')).join('');const result=await database.prepare('INSERT INTO usage (id,count) VALUES (?,1) ON CONFLICT(id) DO UPDATE SET count=count+1 WHERE count<5 RETURNING count').bind('inquiry:'+key).first();if(!result)throw Object.assign(new Error('문의가 여러 번 접수되었습니다. 잠시 후 다시 이용해주세요.'),{status:429});
+ await database.prepare("INSERT OR IGNORE INTO inquiries (id,name,email,type,content,status,consent_version,created_at,updated_at) VALUES (?,?,?,?,?,'new','2026-10-29',?,?)").bind(value.id,value.name,value.email,value.type,value.content,now.toISOString(),now.toISOString()).run();return {reference:inquiryReference(value.id),existing:false};
+}

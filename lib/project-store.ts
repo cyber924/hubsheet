@@ -1,0 +1,28 @@
+import {publicationIssues,publicationPhotos} from './publication';
+import {ensureIncidentRecovery} from './incident-recovery';
+import {UPDATE_DRAFT,INSERT_DRAFT,INSERT_VERSION,PUBLISH_DRAFT,UNPUBLISH_DRAFT,INSERT_BASELINE} from './project-sql.mjs';
+import {env} from 'cloudflare:workers';import {getDb} from '../db';import {projects} from '../db/schema';import {eq,and,isNull,isNotNull,desc} from 'drizzle-orm';
+import {projectSchema} from './project-schema';import {canReadGeneratedAsset} from './asset-access';import {documentKey,publicSnapshot} from './project-policy.mjs';
+export async function ownedRow(id:string,userId:string){const [row]=await getDb().select().from(projects).where(eq(projects.id,id)).limit(1);if(!row||row.deletedAt||row.ownerId!==userId)throw Object.assign(new Error('프로젝트 접근 권한이 없습니다.'),{status:403});return row;}
+export function draftResult(row:any){const value=JSON.parse(row.data);return {...value,id:row.id,visibility:row.visibility,status:row.status,updatedAt:row.updatedAt,revision:row.revision,publishedRevision:row.publishedRevision,publishedAt:row.publishedAt,publishedTitle:row.visibility==='public'?JSON.parse(publicSnapshot(row)).title:undefined,publishedCategory:row.visibility==='public'?JSON.parse(publicSnapshot(row)).category:undefined,hasUnpublishedChanges:row.visibility==='public'&&documentKey(value)!==documentKey(JSON.parse(publicSnapshot(row)))};}
+export async function ownedProjects(userId:string,trash=false){await ensureIncidentRecovery();const rows=await getDb().select().from(projects).where(and(eq(projects.ownerId,userId),trash?isNotNull(projects.deletedAt):isNull(projects.deletedAt))).orderBy(desc(projects.updatedAt)).limit(100);return rows.map(row=>({...draftResult(row),deletedAt:row.deletedAt}));}
+export async function saveDraft(userId:string,raw:any,label='자동 저장'){
+ const data=projectSchema.parse(raw);if(data.cover&&!((data.cover.source==='section'?data.sections:data.images).some(x=>x.id===data.cover?.id)))delete data.cover;
+ const old=raw.id?await ownedRow(String(raw.id),userId):null;const expected=raw.expectedRevision===undefined?(old?.revision||0):Number(raw.expectedRevision);if(!Number.isInteger(expected)||expected<0||old&&expected!==old.revision)throw Object.assign(new Error('다른 창에서 수정한 내용이 있습니다. 프로젝트를 새로 불러온 뒤 다시 저장해주세요.'),{status:409});
+ if(old&&documentKey(JSON.parse(old.data))===documentKey(data))return {id:old.id,updatedAt:old.updatedAt,revision:old.revision,visibility:old.visibility,publishedRevision:old.publishedRevision,publishedAt:old.publishedAt,hasUnpublishedChanges:draftResult(old).hasUnpublishedChanges};
+ for(const s of data.sections)for(const url of [s.generatedUrl,s.backgroundUrl]){if(!url||url==='/samples/fashion-detail.webp')continue;const path=url.startsWith('/api/assets/')?url.slice('/api/assets/'.length):'';if(!await canReadGeneratedAsset(path,userId))throw Object.assign(new Error('접근할 수 없는 생성 이미지가 포함되어 있습니다.'),{status:403});}
+ if(data.brand?.logoUrl){const path=data.brand.logoUrl.slice('/api/assets/'.length);if(!await canReadGeneratedAsset(path,userId))throw Object.assign(new Error('접근할 수 없는 로고입니다.'),{status:403});}
+ const id=old?.id||crypto.randomUUID();const revision=(old?.revision||0)+1;const now=new Date().toISOString();const previous=old?JSON.parse(old.data):{};const json=JSON.stringify({...data,...(previous.scheduledAt?{scheduledAt:previous.scheduledAt,scheduledRevision:previous.scheduledRevision}:{})});const db=env.DB!;
+ const write=old?db.prepare(UPDATE_DRAFT).bind(data.title,data.category,json,data.sections.length?'complete':'draft',now,revision,id,userId,expected):db.prepare(INSERT_DRAFT).bind(id,userId,data.title,data.category,data.sections.length?'complete':'draft',json,now,now,revision);
+ const version=db.prepare(INSERT_VERSION).bind(`${id}:${revision}`,id,userId,revision,json,label,now);
+ const statements=old?[db.prepare(INSERT_BASELINE).bind(id,userId,expected),write,version]:[write,version];const results=await db.batch(statements);if(!results[old?1:0].meta.changes)throw Object.assign(new Error('다른 창에서 수정한 내용이 있습니다. 프로젝트를 다시 불러와주세요.'),{status:409});
+ // Keep every historical version; only the UI list is paginated.
+ return {id,revision,updatedAt:now,visibility:old?.visibility||'private',publishedRevision:old?.publishedRevision||0,publishedAt:old?.publishedAt||null,hasUnpublishedChanges:old?.visibility==='public'&&documentKey(data)!==documentKey(JSON.parse(publicSnapshot(old)))};
+}
+export async function publishDraft(id:string,userId:string,action:string,expectedRevision?:number){
+ const row=await ownedRow(id,userId);const expected=expectedRevision??row.revision;if(expected!==row.revision)throw Object.assign(new Error('저장된 최신 초안을 확인한 뒤 공개해주세요.'),{status:409});
+ if(action==='publish'){const p=JSON.parse(row.data);const issues=publicationIssues(p);if(issues.length)throw Object.assign(new Error(issues.join(' ')),{status:400});for(const url of publicationPhotos(p)){if(url.startsWith('/api/assets/')){const object=await env.BUCKET!.head(url.slice('/api/assets/'.length));if(!object?.size)throw Object.assign(new Error('불러올 수 없는 이미지가 있습니다. 편집 화면에서 이미지를 확인해주세요.'),{status:400});}}}const now=new Date().toISOString();
+ const r=action==='publish'?await env.DB!.prepare(PUBLISH_DRAFT).bind(now,id,userId,expected).run():await env.DB!.prepare(UNPUBLISH_DRAFT).bind(id,userId,expected).run();
+ if(!r.meta.changes)throw Object.assign(new Error('다른 창에서 수정한 내용이 있습니다. 다시 불러와주세요.'),{status:409});
+ return {id,revision:row.revision,visibility:action==='publish'?'public':'private',publishedRevision:action==='publish'?row.revision:row.publishedRevision,publishedAt:action==='publish'?now:row.publishedAt,hasUnpublishedChanges:false};
+}

@@ -1,0 +1,2 @@
+import type {MetadataRoute} from 'next';import {ORIGIN} from '../lib/types';
+export default function robots():MetadataRoute.Robots{return {rules:{userAgent:'*',allow:['/market','/about','/samples/','/ads/','/api/assets/','/api/ad-assets/'],disallow:['/api/ai','/api/auth/','/api/projects','/api/product-','/api/admin/','/api/inquiries','/api/me','/api/milo','/api/hub','/api/brand','/studio','/projects','/milo','/settings','/hub','/prd','/login','/signup','/admin','/product-images']},sitemap:ORIGIN+'/sitemap.xml'};}

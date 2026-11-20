@@ -1,0 +1,42 @@
+import type {ProjectData,Section} from './types';import {fontFamily,typography,legacySection,FONT_OPTIONS} from './typography';import {sectionImage} from './export-document';import {layoutKind,palette,overlaySettings} from './layouts';
+async function image(url:string){const r=await fetch(url);if(!r.ok)throw new Error('이미지를 불러오지 못했습니다.');const object=URL.createObjectURL(await r.blob());return new Promise<HTMLImageElement>((resolve,reject)=>{const im=new Image();im.onload=()=>{URL.revokeObjectURL(object);resolve(im)};im.onerror=()=>{URL.revokeObjectURL(object);reject(new Error('이미지 로딩 실패'))};im.src=object;});}
+export function wrapText(ctx:CanvasRenderingContext2D,text:string,width:number){const lines:string[]=[];for(const paragraph of text.replace(/\r\n?/g,'\n').split('\n')){let line='';for(const ch of paragraph){if(ctx.measureText(line+ch).width>width&&line&&!/[.,!?…:;)]/.test(ch)){lines.push(line);line=ch}else line+=ch}lines.push(line)}return lines;}
+export async function loadProjectFonts(p:ProjectData){const ids=new Set(p.sections.filter(s=>!legacySection(s)).flatMap(s=>{const t=typography(s);return [t.title.font,t.body.font]}));if(ids.size)ids.add('pretendard');for(const f of FONT_OPTIONS.filter(f=>ids.has(f.id))){await Promise.all([document.fonts.load(`600 44px "${f.family}"`,'상품 상세페이지'),document.fonts.load(`400 20px "${f.family}"`,'상품 상세페이지')]);if(!document.fonts.check(`400 20px "${f.family}"`,'상품 상세페이지'))throw new Error('선택한 글꼴을 불러오지 못했습니다. 다시 다운로드해주세요.');}}
+function cover(ctx:CanvasRenderingContext2D,im:HTMLImageElement,x:number,y:number,w:number,h:number,px=50,py=50,zoom=1){const k=Math.max(w/im.width,h/im.height)*zoom;ctx.save();ctx.beginPath();ctx.rect(x,y,w,h);ctx.clip();ctx.drawImage(im,x+(w-im.width*k)*px/100,y+(h-im.height*k)*py/100,im.width*k,im.height*k);ctx.restore()}
+export async function renderSection(p:ProjectData,s:Section,width:number,index=0){
+ const im=await image(sectionImage(p,s)),c=document.createElement('canvas');c.width=width;
+ if(legacySection(s)){c.height=Math.ceil(width*im.height/im.width);c.getContext('2d')!.drawImage(im,0,0,width,c.height);return c;}
+ const t=typography(s),o=overlaySettings(s),kind=layoutKind(p,s,index),scale=width/860,colors=palette(p);
+ const outer=['inset','benefits'].includes(kind)?width*.05:kind==='steps'?width*.04:0;
+ const area=kind==='overlay'?width*.88*o.width/100:kind==='split'?width*.46:kind==='steps'?width*.92*.53:width-2*outer;
+ const pad=kind==='overlay'?width*.044:kind==='split'?area*.12:kind==='steps'?area*.10:kind==='comparison'?width*.09:kind==='benefits'?0:area*.07;
+ const contentWidth=area-pad*2,titleSize=t.title.size*scale,bodySize=t.body.size*scale;
+ let ctx=c.getContext('2d')!;ctx.font=`600 ${titleSize}px "${fontFamily(t.title.font)}"`;const titles=wrapText(ctx,s.title,contentWidth);
+ const sourceParagraphs=s.body.replace(/\r\n?/g,'\n').split(/\n\n+/);const cards=kind==='benefits',cardPad=width*.03,cardGap=width*.02,columns=sourceParagraphs.length===1?1:2,paragraphWidth=cards?(contentWidth-cardGap*(columns-1))/columns-cardPad*2:contentWidth;
+ ctx.font=`400 ${bodySize}px "${fontFamily(t.body.font)}"`;const paragraphs=sourceParagraphs.map(x=>wrapText(ctx,x,paragraphWidth));
+ const eyebrow=width*.0165,titleLine=titleSize*(t.titleLeading||1.4),bodyLine=bodySize*(t.bodyLeading||1.8),gap=(t.paragraphGap??1)*bodySize;
+ const logo=index===0&&p.brand?.logoUrl?await image(p.brand.logoUrl):null,logoH=logo?Math.min(width*.07,area*.18*logo.height/logo.width):0;
+ const headingH=(logo?logoH+width*.03:0)+eyebrow*1.6+width*.021+titles.length*titleLine+width*.023;
+ const cardHeights:number[]=[];if(cards)for(let i=0;i<paragraphs.length;i+=columns)cardHeights.push(Math.max(...paragraphs.slice(i,i+columns).map(x=>x.length*bodyLine))+cardPad*2);
+ const bodyH=cards?cardHeights.reduce((a,b)=>a+b,0)+cardGap*Math.max(0,cardHeights.length-1):paragraphs.reduce((n,x)=>n+x.length*bodyLine,0)+(paragraphs.length-1)*gap+(kind==='steps'?paragraphs.length*width*.06:0);
+ const textH=pad*2+headingH+bodyH;
+ const imageW=kind==='split'?width*.54:width-outer*2,rawImageH=imageW*im.height/im.width;
+ const photoH=kind==='detail'?Math.min(rawImageH,width*.95):kind==='comparison'?width*.65+width*.04:kind==='benefits'?Math.min(rawImageH,width*.85):rawImageH;
+ c.height=Math.ceil(kind==='overlay'?Math.max(width*1.15,textH+width*.12):kind==='split'?Math.max(textH,width*.55):kind==='steps'?Math.max(width*.8,textH)+outer*2:photoH+textH+outer*2+(kind==='detail'?width*.12:0));ctx=c.getContext('2d')!;
+ ctx.fillStyle=colors.background;ctx.fillRect(0,0,width,c.height);let textX=outer,textY=outer;
+ if(kind==='overlay'){
+  cover(ctx,im,0,0,width,c.height,o.photoX,o.photoY);const [v,h]=o.position.split('-');textX=h==='left'?width*.06:h==='right'?width*.94-area:(width-area)/2;textY=v==='top'?width*.06:v==='bottom'?c.height-width*.06-textH:(c.height-textH)/2;
+  if(o.backdrop!=='none'){const rgb=o.tone==='light'?'18,25,22':'255,252,246';if(o.backdrop==='gradient'){const shade=ctx.createLinearGradient(textX,textY,textX+area,textY+textH*.25);shade.addColorStop(0,`rgba(${rgb},${o.opacity/100})`);shade.addColorStop(.45,`rgba(${rgb},${o.opacity/100})`);shade.addColorStop(1,`rgba(${rgb},0)`);ctx.fillStyle=shade;}else ctx.fillStyle=`rgba(${rgb},${o.opacity/100})`;ctx.fillRect(textX,textY,area,textH);}
+ }else if(kind==='split'){cover(ctx,im,area,0,width-area,c.height,o.photoX,o.photoY);textY=(c.height-textH)/2;}
+ else if(kind==='steps'){cover(ctx,im,outer,outer,width*.92*.47,c.height-outer*2,o.photoX,o.photoY);textX=outer+width*.92*.47;textY=(c.height-textH)/2;}
+ else if(kind==='comparison'){const second=await image(p.images.find(x=>x.id===s.secondaryImageId)?.url||p.images.find(x=>x.id!==s.imageId)?.url||sectionImage(p,s));cover(ctx,im,width*.04,width*.04,width*.45,width*.65,o.photoX,o.photoY);cover(ctx,second,width*.51,width*.04,width*.45,width*.65);textY=photoH;}
+ else if(kind==='detail'){cover(ctx,im,0,0,width,photoH,o.photoX,o.photoY);const size=width*.34,cx=width*.78,cy=photoH-width*.05;ctx.save();ctx.beginPath();ctx.arc(cx,cy,size/2+width*.016,0,Math.PI*2);ctx.fillStyle=colors.background;ctx.fill();ctx.beginPath();ctx.arc(cx,cy,size/2,0,Math.PI*2);ctx.clip();cover(ctx,im,cx-size/2,cy-size/2,size,size,o.photoX,o.photoY,1.85);ctx.restore();textY=photoH+width*.12;}
+ else{const first=kind==='photo-first'||kind==='benefits';const iy=first?outer:outer+textH;cover(ctx,im,outer,iy,imageW,photoH,o.photoX,o.photoY);textY=first?outer+photoH:outer;}
+ ctx.fillStyle=kind==='overlay'?(o.tone==='light'?'#ffffff':'#292d27'):colors.color;ctx.textAlign=t.align||'center';ctx.textBaseline='top';const x=textX+(t.align==='left'?pad:t.align==='right'?area-pad:area/2);let y=textY+pad;
+ if(logo){const lw=logoH*logo.width/logo.height;ctx.drawImage(logo,textX+(area-lw)/2,y,lw,logoH);y+=logoH+width*.03;}
+ ctx.font=`500 ${eyebrow}px "${fontFamily('pretendard')}"`;ctx.fillText(s.eyebrow,x,y);y+=eyebrow*1.6+width*.021;ctx.font=`600 ${titleSize}px "${fontFamily(t.title.font)}"`;for(const line of titles){ctx.fillText(line,x,y);y+=titleLine;}y+=width*.023;ctx.font=`400 ${bodySize}px "${fontFamily(t.body.font)}"`;
+ if(cards){const cardW=(contentWidth-cardGap*(columns-1))/columns;const savedInk=ctx.fillStyle;paragraphs.forEach((lines,n)=>{const row=Math.floor(n/columns),col=n%columns,cy=y+cardHeights.slice(0,row).reduce((a,b)=>a+b,0)+row*cardGap,cx=textX+pad+col*(cardW+cardGap);ctx.fillStyle='rgba(255,255,255,.44)';ctx.fillRect(cx,cy,cardW,cardHeights[row]);ctx.fillStyle=savedInk;ctx.textAlign='left';lines.forEach((line,j)=>ctx.fillText(line,cx+cardPad,cy+cardPad+j*bodyLine));});}
+ else paragraphs.forEach((lines,n)=>{if(n)y+=gap;if(kind==='steps'){ctx.globalAlpha=.55;ctx.font=`500 ${width*.018}px "${fontFamily('pretendard')}"`;ctx.fillText(String(n+1).padStart(2,'0'),x,y);ctx.globalAlpha=1;y+=width*.06;ctx.font=`400 ${bodySize}px "${fontFamily(t.body.font)}"`;}for(const line of lines){ctx.fillText(line,x,y);y+=bodyLine;}});
+ return c;
+}
+export async function renderFull(p:ProjectData,width:number){await loadProjectFonts(p);const sections=[];for(const [i,s] of p.sections.entries())sections.push(await renderSection(p,s,width,i));const height=sections.reduce((n,c)=>n+c.height,0);if(height>30000)throw new Error('전체 이미지가 너무 깁니다. 출력 폭이나 페이지 수를 줄여주세요.');const c=document.createElement('canvas');c.width=width;c.height=height;const ctx=c.getContext('2d')!;let y=0;for(const section of sections){ctx.drawImage(section,0,y);y+=section.height}return c;}

@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1793155297881,
+      "tag": "0000_shocking_avengers",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1793163125909,
+      "tag": "0001_sloppy_tomorrow_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793166436191,
+      "tag": "0002_unknown_wolverine",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1793167762441,
+      "tag": "0003_freezing_the_watchers",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1793238375134,
+      "tag": "0004_shiny_the_hunter",
+      "breakpoints": true
+    }
+  ]
+}

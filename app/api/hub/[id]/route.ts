@@ -1,0 +1,2 @@
+import {readHubImage} from '../../../../lib/hub';
+export async function GET(req:Request,{params}:any){try{const {id}=await params;const data=await readHubImage(id);const [head,raw]=data.split(',');const bytes=Uint8Array.from(atob(raw),x=>x.charCodeAt(0));return new Response(bytes,{headers:{'Content-Type':head.split(':')[1].split(';')[0],'Cache-Control':'public,max-age=3600','X-Content-Type-Options':'nosniff'}});}catch{return Response.json({error:'이미지를 찾을 수 없습니다.'},{status:404});}}

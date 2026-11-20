@@ -1,0 +1,2 @@
+import {z} from 'zod';
+export const productImageSchema=z.object({jobId:z.string().uuid().optional(),prompt:z.string().max(8000).optional(),action:z.enum(['generate','save','upload']),setId:z.string().uuid(),referenceId:z.string().regex(/^[\w-]{1,150}$/).optional(),title:z.string().min(1).max(100),category:z.enum(['패션','식품','화장품','생활용품','디지털','기타']),facts:z.string().max(3000).default(''),shot:z.string().min(1).max(60),dataUrl:z.string().max(290000).optional()});

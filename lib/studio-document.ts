@@ -1,0 +1,4 @@
+import type {ProjectData} from './types';import type {ProductSet} from './product-shots';import {categoryLayouts} from './layouts';
+export function blankProject(category='패션'):ProjectData{return {title:'',category,description:'',highlights:'',unknowns:[],images:[],style:'editorial',layout:categoryLayouts(category)[0]?.id,channel:'naver',pageCount:4,sections:[]};}
+export function projectFromSet(set:ProductSet):ProjectData{const images=set.images.filter(x=>set.reviewed.includes(x.id));if(!images.length)throw new Error('검토 완료한 사진이 없습니다.');return {...blankProject(set.category),title:set.title,highlights:set.facts,unknowns:set.analysis?.unknowns||[],images,pageCount:Math.min(4,images.length)};}
+export function shouldSyncPublic(manual:boolean,enabled:boolean,project:Pick<ProjectData,'visibility'|'sections'>){return manual&&enabled&&project.visibility==='public'&&project.sections.length>0;}

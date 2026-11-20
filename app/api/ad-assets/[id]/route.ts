@@ -1,0 +1,2 @@
+import {bucket} from '../../../../lib/server';
+export async function GET(req:Request,{params}:any){const {id}=await params;if(!/^[\w-]+\.(png|jpeg|webp)$/.test(id))return new Response(null,{status:404});const obj=await bucket().get('advertisements/'+id);if(!obj)return new Response(null,{status:404});const headers=new Headers();obj.writeHttpMetadata(headers);headers.set('Cache-Control','public,max-age=86400');headers.set('X-Content-Type-Options','nosniff');return new Response(obj.body,{headers});}

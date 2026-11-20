@@ -1,0 +1,5 @@
+import {persistWithAuthRefresh} from './hub-generation.mjs';
+import {readSession,parseCookies,ID_COOKIE,REFRESH_COOKIE,FIREBASE_WEB_API_KEY,FIREBASE_PROJECT_ID} from './firebase-auth.mjs';
+export async function hubToken(req:Request,force=false){const cookies=parseCookies(req.headers.get('cookie')||'') as Record<string,string>;const session=await readSession(force&&cookies[REFRESH_COOKIE]?`${REFRESH_COOKIE}=${encodeURIComponent(cookies[REFRESH_COOKIE])}`:req.headers.get('cookie')||'');if(!session.user)throw Object.assign(new Error('로그인 후 저장을 다시 시도해주세요. 생성 결과는 보관되어 있습니다.'),{status:401,stage:'authenticate',code:'UNAUTHENTICATED'});return {user:session.user,token:session.tokens?.idToken||cookies[ID_COOKIE]};}
+export const hubBase=`https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents`;
+export async function saveHubImage(req:Request,id:string,payload:Record<string,any>){return persistWithAuthRefresh(hubBase,FIREBASE_WEB_API_KEY,(force:boolean)=>hubToken(req,force),id,payload);}

@@ -1,0 +1,4 @@
+import {canAdmin} from '../../../lib/project-policy.mjs';
+import {legacyInfo} from '../../../lib/legacy-account';
+import {readSession,sessionHeaders,ID_COOKIE,REFRESH_COOKIE} from '../../../lib/firebase-auth.mjs';import {env} from 'cloudflare:workers';
+export async function GET(req:Request){try{const session=await readSession(req.headers.get('cookie')||'');return Response.json({user:session.user?{...session.user,isAdmin:canAdmin(session.user)}:null,legacy:session.user?await legacyInfo(req.headers,session.user.id):null,aiConnected:!!(env as any).GEMINI_API_KEY},{headers:session.tokens?sessionHeaders(session.tokens):!session.user&&(req.headers.get('cookie')||'').includes('__Host-hubsheet-')?sessionHeaders(null):{'Cache-Control':'no-store'}});}catch{return Response.json({error:'로그인 상태를 확인하지 못했습니다. 잠시 후 다시 시도해주세요.'},{status:503,headers:{'Cache-Control':'no-store'}});}}

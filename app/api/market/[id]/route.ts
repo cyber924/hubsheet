@@ -1,0 +1,2 @@
+import {getProject,fail} from '../../../../lib/server';import {categoryAd} from '../../../../lib/ads';
+export async function GET(req:Request,{params}:any){try{const {id}=await params;const project=await getProject(id);if(!project||project.visibility!=='public')return Response.json({error:'이 상세페이지는 현재 공개되지 않았습니다.'},{status:404,headers:{'Cache-Control':'no-store'}});return Response.json({project,ad:await categoryAd(project.category)},{headers:{'Cache-Control':'no-store'}});}catch(e){return fail(e)}}
