@@ -1,11 +1,12 @@
 import type { NextConfig } from "next";
 import path from "node:path";
 
-// Auth is handled locally on Vercel. Only data/file APIs go to Cloudflare.
+// Firebase authentication and /api/me stay on Vercel. The existing Cloudflare
+// service continues to own D1, object storage and other data APIs.
 const proxied = [
-  "ad-assets", "admin", "agent-recommend", "ai", "assets", "brand-upload",
-  "brand", "hub", "inquiries", "market", "me", "milo",
-  "product-images", "product-jobs", "product-sets", "projects"
+  "ad-assets","admin","agent-recommend","ai","assets","brand-upload",
+  "brand","hub","inquiries","market","milo",
+  "product-images","product-jobs","product-sets","projects"
 ];
 
 const nextConfig: NextConfig = {
@@ -22,10 +23,10 @@ const nextConfig: NextConfig = {
   async rewrites() {
     if (!process.env.VERCEL) return [];
     return {
-      beforeFiles: proxied.map(prefix => ({
-        source: `/api/${prefix}/:path*`,
-        destination: `/api/vercel-proxy/${prefix}/:path*`,
-      })),
+      beforeFiles: proxied.flatMap(prefix => [
+        { source: `/api/${prefix}`, destination: `/api/vercel-proxy/${prefix}` },
+        { source: `/api/${prefix}/:path*`, destination: `/api/vercel-proxy/${prefix}/:path*` }
+      ]),
       afterFiles: [],
       fallback: [],
     };
