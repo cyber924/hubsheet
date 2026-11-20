@@ -2,7 +2,7 @@ import {PublicShell,ProjectCard} from '../ui';
 import {ContactForm} from '../contact-form';
 import {StructuredData} from '../structured-data';
 import {publicMetadata,SERVICE_DESCRIPTION,absoluteUrl} from '../../lib/seo';
-import {getPublicProjects} from '../../lib/server';
+import {getPublicProjects} from '../../lib/vercel-public-server';
 import {sample} from '../../lib/sample';
 import {cachedImages} from '../../lib/hub';
 import {ArrowUpRight,Check,ArrowRight,Images,SlidersHorizontal,Download,Layers} from 'lucide-react';
